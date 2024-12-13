@@ -1,17 +1,7 @@
-# Repository for UA CS460/560 - Fall 2024
 
-**Links to ROS resources**
-
-([Short video overview](
-https://vimeo.com/639236696))
-
-
-Tutorials to complete: 
-
-1. ([CLI Tools Tutorial](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools.html))
-2. ([Beginner Client Tutorial](https://docs.ros.org/en/humble/Tutorials/Beginner-Client-Libraries.html))
-
-
-***Homework Assignment 1***
-
-[Webots/ROS2/Heuristic Search](./Homework1/Assignment.md)
+To execute the controller for this package you need to run:
+1. cd cs460_proj3
+2. colcon build
+3. source install/setup.bash
+4. ros2 launch webots_ros2_homework1_python f23_robotics_1_launch.py
+5. ros2 launch webots_ros2_homework1_python controller_launch.py

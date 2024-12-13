@@ -15,13 +15,13 @@ import csv
 LINEAR_VEL = 0.22
 STOP_DISTANCE = 0.2
 LIDAR_ERROR = 0.05
-LIDAR_AVOID_DISTANCE = 0.7
+LIDAR_AVOID_DISTANCE = 0.8
 SAFE_STOP_DISTANCE = STOP_DISTANCE + LIDAR_ERROR
 RIGHT_SIDE_INDEX = 270
 RIGHT_FRONT_INDEX = 210
 LEFT_FRONT_INDEX=150
 LEFT_SIDE_INDEX=90
-WALL_FOLLOW_DISTANCE = SAFE_STOP_DISTANCE + 0.22 #how far should the bot be from the wall
+WALL_FOLLOW_DISTANCE = SAFE_STOP_DISTANCE + 0.4 #how far should the bot be from the wall
 
 class RightWallFollow(Node):
 
@@ -49,6 +49,7 @@ class RightWallFollow(Node):
         self.pose_curr=None  #current position
         self.cmd = Twist()
         self.timer = self.create_timer(timer_period, self.timer_callback)
+        self.first_wall = False
         
         #wall following
         self.following_wall = False   #is robot on track with wall?
@@ -71,8 +72,9 @@ class RightWallFollow(Node):
         for reading in scan:
             if reading == float('Inf'):
                 self.scan_cleaned.append(3.5)
-            elif math.isnan(reading):
-                self.scan_cleaned.append(0.0)
+            elif (math.isnan(reading) or reading == 0.0):
+                print ('nan or 0')
+                #self.scan_cleaned.append(0.0)
             else:
                 self.scan_cleaned.append(reading)
 
@@ -115,6 +117,8 @@ class RightWallFollow(Node):
         right_lidar_min = min(self.scan_cleaned[RIGHT_FRONT_INDEX:RIGHT_SIDE_INDEX])
         front_lidar_min = min(self.scan_cleaned[LEFT_FRONT_INDEX:RIGHT_FRONT_INDEX])
 
+        self.get_logger().info(f'left: {left_lidar_min}, right: {right_lidar_min}, front: {front_lidar_min}')
+
         #write positions to text file and terminal
         with open('positions_log.txt', 'a') as f:
             # print position to terminal
@@ -126,8 +130,19 @@ class RightWallFollow(Node):
         #get current time
         curr_time = time.time()        
 
+        if (self.first_wall == False):
+            if (front_lidar_min < 0.6):
+                self.first_wall = True
+            else:
+                self.cmd.linear.x = 0.22
+                self.get_logger().info('No wall encountered')
+                
+            
+
+        #self.get_logger().info('wall encountered')
+
         #is robot currently following the right wall?
-        if right_lidar_min > WALL_FOLLOW_DISTANCE + 0.08 and (curr_time - self.following_wall_time > 6.0):     #how long since its followed the wall?
+        if right_lidar_min > WALL_FOLLOW_DISTANCE + 0.08 and (curr_time - self.following_wall_time > 6.0) and self.first_wall:     #how long since its followed the wall?
             self.following_wall = False #hasn't been following wall for a considerable amt of time
 
         #is the robot stalled?
@@ -150,34 +165,43 @@ class RightWallFollow(Node):
             self.stall_detected_time = 0.0
             self.stall = False
         # Is there is an obstacle in front?
-        elif front_lidar_min < LIDAR_AVOID_DISTANCE:
+        elif front_lidar_min < LIDAR_AVOID_DISTANCE and self.first_wall:
             self.cmd.linear.x = 0.08  # slow down moving forward
             #can follow the right wall?
             if right_lidar_min > WALL_FOLLOW_DISTANCE and self.following_wall:
-                    self.cmd.angular.z = -0.4  # currently close to wall, turn right to avoid the front obstacle
+                    self.cmd.linear.x = 0.08
+                    self.cmd.angular.z = -0.3  # currently close to wall, turn right to avoid the front obstacle
                     self.following_wall_time = curr_time # currently following wall
+                    self.publisher_.publish(self.cmd)
+                    self.get_logger().info('Object in front, turning right')
             else:
-                self.cmd.angular.z = 0.4 #currently not following right wall, turn left to avoid obstacle
-            self.publisher_.publish(self.cmd)
-            self.get_logger().info('Object in front, turning away')
+                self.cmd.linear.x = 0.05
+                self.cmd.angular.z = 0.5 #currently not following right wall, turn left to avoid obstacle
+                self.publisher_.publish(self.cmd)
+                self.get_logger().info('Object in front, turning left')
+            
         else:   # No object in front, right wall following logic
-            if right_lidar_min < SAFE_STOP_DISTANCE:   # Too close to the right wall, turn left
-                self.cmd.linear.x = 0.08
-                self.cmd.angular.z = 0.11  # Turn left
+            if right_lidar_min < SAFE_STOP_DISTANCE and self.first_wall:   # Too close to the right wall, turn left
+                self.cmd.linear.x = 0.15
+                self.cmd.angular.z = 0.3  # Turn left
                 self.following_wall = True
                 self.following_wall_time = curr_time
                 self.get_logger().info('Too close to right wall, turning left')
-            elif right_lidar_min > WALL_FOLLOW_DISTANCE:  # Too far from the right wall, turn right
+            elif right_lidar_min > WALL_FOLLOW_DISTANCE and self.first_wall:  # Too far from the right wall, turn right
                 self.cmd.linear.x = 0.08
-                self.cmd.angular.z = -0.19  # Turn right
+                self.cmd.angular.z = -0.25 # Turn right
                 self.get_logger().info('Finding right wall, turning right')
             else:   # Right wall is at a good distance, move forward
-                self.cmd.linear.x = LINEAR_VEL
+    
+                self.cmd.linear.x = 0.5
                 self.cmd.angular.z = 0.0
-                self.get_logger().info('Following right wall')
-                self.following_wall = True
-                self.following_wall_time = curr_time
+                if (self.first_wall):
+                    self.get_logger().info('Following right wall!') 
+                    self.following_wall = True
+                    self.following_wall_time = curr_time
 
+        print("about to publish")
+        self.get_logger().info(f'Drive command: {self.cmd}')
         self.publisher_.publish(self.cmd)
         self.turtlebot_moving = True
 
